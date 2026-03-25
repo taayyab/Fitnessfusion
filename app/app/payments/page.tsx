@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Payment } from "@/lib/types"
-import { Search, CreditCard, CheckCircle, AlertCircle, Clock, DollarSign, X, RefreshCw, Settings, Loader2 } from "lucide-react"
+import { Search, CreditCard, CheckCircle, AlertCircle, Clock, DollarSign, X, RefreshCw, Settings, Loader2, ChevronDown } from "lucide-react"
 
 const INPUT_CLASS = "w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-red-500/50"
 
@@ -86,6 +86,7 @@ export default function PaymentsPage() {
     const { data: { user } } = await supabase.auth.getUser()
     const updates: Record<string, unknown> = { status, updated_by: user?.id }
     if (status === "paid") updates.paid_date = new Date().toISOString().split("T")[0]
+    else updates.paid_date = null
     await supabase.from("payments").update(updates).eq("id", paymentId)
     await fetchPayments()
     setUpdating(null)
@@ -307,34 +308,30 @@ export default function PaymentsPage() {
                   {payment.due_date && <span>Due: {new Date(payment.due_date).toLocaleDateString()}</span>}
                 </div>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                payment.status === "paid" ? "bg-green-500/10 text-green-400" :
-                payment.status === "overdue" ? "bg-red-500/10 text-red-400" :
-                payment.status === "waived" ? "bg-blue-500/10 text-blue-400" :
-                "bg-yellow-500/10 text-yellow-400"
-              }`}>{payment.status}</span>
-              {payment.status !== "paid" && payment.status !== "waived" && (
-                <div className="flex gap-1">
-                  {updating === payment.id ? (
-                    <div className="animate-spin w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full" />
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => updateStatus(payment.id, "paid")}
-                        className="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs hover:bg-green-500/20 transition-colors"
-                      >
-                        Paid
-                      </button>
-                      <button
-                        onClick={() => updateStatus(payment.id, "waived")}
-                        className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded text-xs hover:bg-blue-500/20 transition-colors"
-                      >
-                        Waive
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+              <div className="relative">
+                {updating === payment.id ? (
+                  <div className="animate-spin w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full" />
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={payment.status}
+                      onChange={(e) => updateStatus(payment.id, e.target.value as Payment["status"])}
+                      className={`appearance-none cursor-pointer text-xs pl-2 pr-6 py-1 rounded-full border-0 focus:outline-none focus:ring-1 focus:ring-red-500/50 ${
+                        payment.status === "paid" ? "bg-green-500/10 text-green-400" :
+                        payment.status === "overdue" ? "bg-red-500/10 text-red-400" :
+                        payment.status === "waived" ? "bg-blue-500/10 text-blue-400" :
+                        "bg-yellow-500/10 text-yellow-400"
+                      }`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="waived">Waived</option>
+                    </select>
+                    <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none text-neutral-500" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
