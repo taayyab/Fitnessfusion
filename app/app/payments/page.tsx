@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { Payment } from "@/lib/types"
 import { Search, CreditCard, CheckCircle, AlertCircle, Clock, DollarSign, X, RefreshCw, Settings, Loader2, ChevronDown } from "lucide-react"
@@ -15,6 +15,18 @@ export default function PaymentsPage() {
   const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7))
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   // Create single payment
   const [showCreate, setShowCreate] = useState(false)
@@ -308,28 +320,55 @@ export default function PaymentsPage() {
                   {payment.due_date && <span>Due: {new Date(payment.due_date).toLocaleDateString()}</span>}
                 </div>
               </div>
-              <div className="relative">
+              <div className="relative" ref={openDropdown === payment.id ? dropdownRef : undefined}>
                 {updating === payment.id ? (
                   <div className="animate-spin w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full" />
                 ) : (
-                  <div className="relative">
-                    <select
-                      value={payment.status}
-                      onChange={(e) => updateStatus(payment.id, e.target.value as Payment["status"])}
-                      className={`appearance-none cursor-pointer text-xs pl-2 pr-6 py-1 rounded-full border-0 focus:outline-none focus:ring-1 focus:ring-red-500/50 ${
-                        payment.status === "paid" ? "bg-green-500/10 text-green-400" :
-                        payment.status === "overdue" ? "bg-red-500/10 text-red-400" :
-                        payment.status === "waived" ? "bg-blue-500/10 text-blue-400" :
-                        "bg-yellow-500/10 text-yellow-400"
+                  <>
+                    <button
+                      onClick={() => setOpenDropdown(openDropdown === payment.id ? null : payment.id)}
+                      className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full cursor-pointer transition-colors ${
+                        payment.status === "paid" ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" :
+                        payment.status === "overdue" ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" :
+                        payment.status === "waived" ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20" :
+                        "bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"
                       }`}
                     >
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="waived">Waived</option>
-                    </select>
-                    <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none text-neutral-500" />
-                  </div>
+                      {payment.status}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {openDropdown === payment.id && (
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl shadow-black/40 py-1 min-w-[120px]">
+                        {(["pending", "paid", "overdue", "waived"] as const).map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setOpenDropdown(null)
+                              if (s !== payment.status) updateStatus(payment.id, s)
+                            }}
+                            className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                              s === payment.status
+                                ? "bg-neutral-700/50 font-medium"
+                                : "hover:bg-neutral-700/30"
+                            } ${
+                              s === "paid" ? "text-green-400" :
+                              s === "overdue" ? "text-red-400" :
+                              s === "waived" ? "text-blue-400" :
+                              "text-yellow-400"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              s === "paid" ? "bg-green-400" :
+                              s === "overdue" ? "bg-red-400" :
+                              s === "waived" ? "bg-blue-400" :
+                              "bg-yellow-400"
+                            }`} />
+                            {s.charAt(0).toUpperCase() + s.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
