@@ -1,29 +1,38 @@
 {
   "expo": {
-    "name": "Fitness-fusion",
+    "name": "Fitness Fusion",
     "slug": "Fitness-fusion",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/app-icon.png",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/fitness-fusion.jpg",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0D0D0D"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fitnessfusion.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+        "backgroundColor": "#0D0D0D",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "package": "com.fitnessfusion.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/fitness-fusion.jpg"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4eee7dca-b7f2-4be3-8330-bcc3acf0fa16"
+      }
+    },
+    "owner": "toiyab",
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
