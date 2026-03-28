@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@/lib/types"
-import { Search, X, UserPlus, Filter, Edit2, Save, Camera, RefreshCw } from "lucide-react"
+import { Search, X, UserPlus, Filter, Edit2, Save, Camera, RefreshCw, MessageCircle } from "lucide-react"
 
 const INPUT_CLASS = "w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-red-500/50"
 const LABEL_CLASS = "block text-sm text-neutral-400 mb-1"
@@ -19,7 +19,7 @@ export default function MembersPage() {
   const [editForm, setEditForm] = useState<Record<string, string | number | boolean | null>>({})
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [newMember, setNewMember] = useState({ email: "", password: "", full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
+  const [newMember, setNewMember] = useState({ full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
   const [newMemberImage, setNewMemberImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -168,7 +168,7 @@ export default function MembersPage() {
       }
 
       setShowAdd(false)
-      setNewMember({ email: "", password: "", full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
+      setNewMember({ full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
       setNewMemberImage(null)
       setImagePreview(null)
       setTimeout(fetchMembers, 500)
@@ -302,11 +302,11 @@ export default function MembersPage() {
 
       {/* Member Detail / Edit Modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false) }}>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-white text-lg font-semibold">{editing ? "Edit Member" : "Member Details"}</h3>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => { setSelected(null); setEditing(false) }}>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-white text-base sm:text-lg font-semibold">{editing ? "Edit Member" : "Member Details"}</h3>
                 <div className="flex items-center gap-2">
                   {!editing && (
                     <button onClick={() => openEdit(selected)} className="text-neutral-400 hover:text-white p-1">
@@ -322,8 +322,8 @@ export default function MembersPage() {
               {editing ? (
                 /* Edit Form */
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
                       <label className={LABEL_CLASS}>Full Name</label>
                       <input value={String(editForm.full_name || "")} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} className={INPUT_CLASS} />
                     </div>
@@ -408,8 +408,8 @@ export default function MembersPage() {
               ) : (
                 /* View Details */
                 <>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-16 h-16 bg-neutral-800 rounded-full flex items-center justify-center text-white text-xl font-medium overflow-hidden">
+                  <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-neutral-800 rounded-full flex items-center justify-center text-white text-lg sm:text-xl font-medium overflow-hidden flex-shrink-0">
                       {selected.profile_picture ? (
                         <img src={selected.profile_picture} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -417,7 +417,7 @@ export default function MembersPage() {
                       )}
                     </div>
                     <div>
-                      <p className="text-white text-lg font-semibold">{selected.full_name || "Unnamed"}</p>
+                      <p className="text-white text-base sm:text-lg font-semibold truncate">{selected.full_name || "Unnamed"}</p>
                       <p className="text-neutral-500 text-sm">{selected.email}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block ${
                         selected.role === "admin" ? "bg-purple-500/10 text-purple-400" :
@@ -427,7 +427,7 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
                     {[
                       { label: "Gender", value: selected.gender },
                       { label: "Age", value: selected.age },
@@ -445,15 +445,15 @@ export default function MembersPage() {
                       { label: "Membership Expiry", value: selected.membership_expiry ? new Date(selected.membership_expiry).toLocaleDateString() : null },
                       { label: "Status", value: selected.is_active ? "Active" : (selected.membership_expiry && new Date(selected.membership_expiry) < new Date() ? "Expired" : "Inactive") },
                     ].map((item) => (
-                      <div key={item.label} className="bg-neutral-800/50 rounded-lg p-3">
+                      <div key={item.label} className="bg-neutral-800/50 rounded-lg p-2 sm:p-3">
                         <p className="text-neutral-500 text-xs">{item.label}</p>
                         <p className="text-white capitalize">{item.value || "N/A"}</p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="mt-6 flex flex-col gap-3">
-                    <div className="flex gap-3">
+                  <div className="mt-4 sm:mt-6 flex flex-col gap-2 sm:gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                       <button
                         onClick={() => openEdit(selected)}
                         className="flex-1 flex items-center justify-center gap-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -479,6 +479,20 @@ export default function MembersPage() {
                         <RefreshCw className="w-4 h-4" /> Renew Membership (30 Days)
                       </button>
                     )}
+                    {selected.whatsapp && (
+                      <button
+                        onClick={() => {
+                          const name = selected.full_name || "Member"
+                          const expiry = selected.membership_expiry ? new Date(selected.membership_expiry).toLocaleDateString() : "N/A"
+                          const message = `Assalam-o-Alaikum ${name},\n\nThis is a reminder from *Fitness Fusion Gym* 🏋️\nYour membership is expiring on *${expiry}*.\nPlease renew your membership to continue your fitness journey with us.\n\nیہ *فٹنس فیوژن جم* کی طرف سے یاد دہانی ہے 🏋️\nآپ کی رکنیت *${expiry}* کو ختم ہو رہی ہے۔\nبراہ کرم اپنی رکنیت کی تجدید کریں تاکہ آپ ہمارے ساتھ اپنا فٹنس سفر جاری رکھ سکیں۔\n\nThank you / شکریہ\nFitness Fusion Gym`
+                          const phone = selected.whatsapp.replace(/[^0-9]/g, "")
+                          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank")
+                        }}
+                        className="w-full flex items-center justify-center gap-2 bg-green-600/10 text-green-400 hover:bg-green-600/20 border border-green-500/20 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <MessageCircle className="w-4 h-4" /> Message on WhatsApp
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -489,11 +503,11 @@ export default function MembersPage() {
 
       {/* Add Member Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-white text-lg font-semibold">Add New Member</h3>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowAdd(false)}>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-white text-base sm:text-lg font-semibold">Add New Member</h3>
                 <button onClick={() => setShowAdd(false)} className="text-neutral-500 hover:text-white">
                   <X className="w-5 h-5" />
                 </button>
@@ -503,29 +517,21 @@ export default function MembersPage() {
                 <div className="flex justify-center mb-2">
                   <label className="cursor-pointer group">
                     <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
-                    <div className="w-20 h-20 rounded-full bg-neutral-800 border-2 border-dashed border-neutral-600 group-hover:border-red-500/50 flex items-center justify-center overflow-hidden transition-colors">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-neutral-800 border-2 border-dashed border-neutral-600 group-hover:border-red-500/50 flex items-center justify-center overflow-hidden transition-colors">
                       {imagePreview ? (
                         <img src={imagePreview} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <Camera className="w-6 h-6 text-neutral-500 group-hover:text-red-400 transition-colors" />
+                        <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-500 group-hover:text-red-400 transition-colors" />
                       )}
                     </div>
                     <p className="text-xs text-neutral-500 text-center mt-1">Add Photo</p>
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className={LABEL_CLASS}>Full Name *</label>
-                    <input required value={newMember.full_name} onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value })} className={INPUT_CLASS} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className={LABEL_CLASS}>Email *</label>
-                    <input type="email" required value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} className={INPUT_CLASS} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className={LABEL_CLASS}>Password *</label>
-                    <input type="password" required minLength={6} value={newMember.password} onChange={(e) => setNewMember({ ...newMember, password: e.target.value })} className={INPUT_CLASS} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={LABEL_CLASS}>Full Name</label>
+                    <input value={newMember.full_name} onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value })} className={INPUT_CLASS} />
                   </div>
                   <div>
                     <label className={LABEL_CLASS}>Gender</label>
