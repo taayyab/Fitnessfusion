@@ -485,7 +485,7 @@ export default function MembersPage() {
                           const name = selected.full_name || "Member"
                           const expiry = selected.membership_expiry ? new Date(selected.membership_expiry).toLocaleDateString() : "N/A"
                           const message = `Assalam-o-Alaikum ${name},\n\nThis is a reminder from *Fitness Fusion Gym* 🏋️\nYour membership is expiring on *${expiry}*.\nPlease renew your membership to continue your fitness journey with us.\n\nیہ *فٹنس فیوژن جم* کی طرف سے یاد دہانی ہے 🏋️\nآپ کی رکنیت *${expiry}* کو ختم ہو رہی ہے۔\nبراہ کرم اپنی رکنیت کی تجدید کریں تاکہ آپ ہمارے ساتھ اپنا فٹنس سفر جاری رکھ سکیں۔\n\nThank you / شکریہ\nFitness Fusion Gym`
-                          const phone = selected.whatsapp.replace(/[^0-9]/g, "")
+                          const phone = (selected.whatsapp || "").replace(/[^0-9]/g, "")
                           window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank")
                         }}
                         className="w-full flex items-center justify-center gap-2 bg-green-600/10 text-green-400 hover:bg-green-600/20 border border-green-500/20 py-2.5 rounded-lg text-sm font-medium transition-colors"
