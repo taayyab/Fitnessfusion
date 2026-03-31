@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import type { User } from "@/lib/types"
-import { Search, X, UserPlus, Filter, Edit2, Save, Camera, RefreshCw, MessageCircle } from "lucide-react"
+import type { User, Payment } from "@/lib/types"
+import { Search, X, UserPlus, Filter, Edit2, Save, Camera, MessageCircle } from "lucide-react"
 
 const INPUT_CLASS = "w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-red-500/50"
 const LABEL_CLASS = "block text-sm text-neutral-400 mb-1"
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const
+const getTodayDateString = () => new Date().toISOString().split("T")[0]
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7)
+const addDaysToDateString = (dateString: string, days: number) => {
+  const date = new Date(`${dateString}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().split("T")[0]
+}
 
 export default function MembersPage() {
   const [members, setMembers] = useState<User[]>([])
@@ -19,10 +27,18 @@ export default function MembersPage() {
   const [editForm, setEditForm] = useState<Record<string, string | number | boolean | null>>({})
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [newMember, setNewMember] = useState({ full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
+  const [newMember, setNewMember] = useState({ full_name: "", whatsapp: "", cnic: "", gender: "", blood_group: "", profession: "", fee_date: getTodayDateString() })
   const [newMemberImage, setNewMemberImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [payments, setPayments] = useState<Record<string, Payment>>({})
+
+  function isMemberPaid(member: User): boolean {
+    if (!member.is_active) return false
+    if (!member.membership_expiry) return false
+    return member.membership_expiry >= getTodayDateString()
+  }
+
 
   useEffect(() => { fetchMembers() }, [])
 
@@ -46,33 +62,103 @@ export default function MembersPage() {
 
   async function fetchMembers() {
     const supabase = createClient()
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .order("created_at", { ascending: false })
-    setMembers(data || [])
-    setFiltered(data || [])
+    const today = getTodayDateString()
+    const month = getCurrentMonth()
+
+    const [membersRes, paymentsRes] = await Promise.all([
+      supabase.from("users").select("*").order("created_at", { ascending: false }),
+      supabase.from("payments").select("*").eq("month", month),
+    ])
+
+    let nextMembers = (membersRes.data || []) as User[]
+    const paymentsList = (paymentsRes.data || []) as Payment[]
+
+    // Index payments by user_id for quick lookup
+    const paymentsMap: Record<string, Payment> = {}
+    for (const p of paymentsList) {
+      paymentsMap[p.user_id] = p
+    }
+    setPayments(paymentsMap)
+
+    // Auto-deactivate members whose 30-day membership has expired
+    const expiredMemberIds = nextMembers
+      .filter((m) => m.role === "member" && m.is_active && m.membership_expiry && m.membership_expiry < today)
+      .map((m) => m.id)
+
+    if (expiredMemberIds.length > 0) {
+      await supabase
+        .from("users")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .in("id", expiredMemberIds)
+
+      const expiredSet = new Set(expiredMemberIds)
+      nextMembers = nextMembers.map((m) =>
+        expiredSet.has(m.id) ? { ...m, is_active: false } : m
+      )
+    }
+
+    setMembers(nextMembers)
+    setFiltered(nextMembers)
     setLoading(false)
   }
 
-  async function toggleActive(member: User) {
+  async function setPaymentStatus(member: User, status: "paid" | "unpaid") {
     const supabase = createClient()
-    await supabase.from("users").update({ is_active: !member.is_active }).eq("id", member.id)
-    const updated = { ...member, is_active: !member.is_active }
-    setMembers((prev) => prev.map((m) => (m.id === member.id ? updated : m)))
-    setSelected(updated)
-  }
+    const today = getTodayDateString()
+    const month = getCurrentMonth()
+    const { data: { user } } = await supabase.auth.getUser()
 
-  async function renewMembership(member: User) {
-    const supabase = createClient()
-    const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-    await supabase.from("users").update({
-      is_active: true,
-      membership_expiry: newExpiry,
-    }).eq("id", member.id)
-    const updated = { ...member, is_active: true, membership_expiry: newExpiry }
+    // Update users table
+    const userUpdates =
+      status === "paid"
+        ? {
+            is_active: true,
+            joining_date: today,
+            membership_expiry: addDaysToDateString(today, 30),
+            updated_at: new Date().toISOString(),
+          }
+        : {
+            is_active: false,
+            updated_at: new Date().toISOString(),
+          }
+
+    await supabase.from("users").update(userUpdates).eq("id", member.id)
+
+    // Update or create payment record in payments table
+    const existingPayment = payments[member.id]
+    if (existingPayment) {
+      const paymentUpdates: Record<string, unknown> = {
+        status: status === "paid" ? "paid" : "pending",
+        updated_by: user?.id,
+      }
+      if (status === "paid") paymentUpdates.paid_date = today
+      else paymentUpdates.paid_date = null
+
+      await supabase.from("payments").update(paymentUpdates).eq("id", existingPayment.id)
+    } else if (status === "paid") {
+      // No payment record exists yet — create one as paid
+      await supabase.from("payments").insert({
+        user_id: member.id,
+        amount: 0,
+        month,
+        status: "paid",
+        paid_date: today,
+        due_date: `${month}-07`,
+        updated_by: user?.id,
+      })
+    }
+
+    // Refresh data
+    const updated = { ...member, ...userUpdates }
     setMembers((prev) => prev.map((m) => (m.id === member.id ? updated : m)))
     setSelected(updated)
+    // Re-fetch payments to stay in sync
+    const { data: freshPayments } = await supabase.from("payments").select("*").eq("month", month)
+    const paymentsMap: Record<string, Payment> = {}
+    for (const p of (freshPayments || []) as Payment[]) {
+      paymentsMap[p.user_id] = p
+    }
+    setPayments(paymentsMap)
   }
 
   function openEdit(member: User) {
@@ -88,8 +174,9 @@ export default function MembersPage() {
       blood_group: member.blood_group || "",
       profession: member.profession || "",
       daily_calories: member.daily_calories ?? "",
+      fee_date: member.joining_date || getTodayDateString(),
       role: member.role,
-      is_active: member.is_active,
+      is_active: isMemberPaid(member),
     })
     setEditing(true)
   }
@@ -107,6 +194,10 @@ export default function MembersPage() {
     const supabase = createClient()
     const height = editForm.height ? parseFloat(String(editForm.height)) : null
     const weight = editForm.weight ? parseFloat(String(editForm.weight)) : null
+    const feeDate = editForm.fee_date ? String(editForm.fee_date) : null
+    const membershipExpiry = feeDate ? addDaysToDateString(feeDate, 30) : null
+    const paidFromForm = Boolean(editForm.is_active)
+    const isActive = membershipExpiry ? paidFromForm && membershipExpiry >= getTodayDateString() : paidFromForm
     const { bmi, bmi_category } = calcBmi(height || 0, weight || 0)
 
     const updates = {
@@ -123,12 +214,21 @@ export default function MembersPage() {
       blood_group: editForm.blood_group || null,
       profession: editForm.profession || null,
       daily_calories: editForm.daily_calories ? parseInt(String(editForm.daily_calories)) : null,
+      joining_date: feeDate,
+      membership_expiry: membershipExpiry,
       role: editForm.role as User["role"],
-      is_active: editForm.is_active,
+      is_active: isActive,
       updated_at: new Date().toISOString(),
     }
 
     await supabase.from("users").update(updates).eq("id", selected.id)
+
+    // Sync payment status in payments table
+    const wasPaid = isMemberPaid(selected)
+    if (paidFromForm !== wasPaid) {
+      await setPaymentStatus(selected, paidFromForm ? "paid" : "unpaid")
+    }
+
     setEditing(false)
     setSaving(false)
     await fetchMembers()
@@ -168,7 +268,7 @@ export default function MembersPage() {
       }
 
       setShowAdd(false)
-      setNewMember({ full_name: "", whatsapp: "", cnic: "", gender: "", age: "", height: "", weight: "", goal: "", blood_group: "", profession: "" })
+      setNewMember({ full_name: "", whatsapp: "", cnic: "", gender: "", blood_group: "", profession: "", fee_date: getTodayDateString() })
       setNewMemberImage(null)
       setImagePreview(null)
       setTimeout(fetchMembers, 500)
@@ -234,7 +334,7 @@ export default function MembersPage() {
           <span>CNIC</span>
           <span>Blood Type</span>
           <span>Role</span>
-          <span className="text-right">Status</span>
+          <span className="text-right">Fee Status</span>
         </div>
 
         {filtered.length === 0 ? (
@@ -262,9 +362,9 @@ export default function MembersPage() {
                   </div>
                   {/* Mobile-only status badge */}
                   <span className={`md:hidden text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                    member.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+                    isMemberPaid(member) ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
                   }`}>
-                    {member.is_active ? "Active" : "Inactive"}
+                    {isMemberPaid(member) ? "Paid" : "Unpaid"}
                   </span>
                 </div>
 
@@ -289,9 +389,9 @@ export default function MembersPage() {
                 {/* Status */}
                 <div className="hidden md:block text-right">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    member.is_active ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
+                    isMemberPaid(member) ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
                   }`}>
-                    {member.is_active ? "Active" : "Inactive"}
+                    {isMemberPaid(member) ? "Paid" : "Unpaid"}
                   </span>
                 </div>
               </div>
@@ -380,11 +480,15 @@ export default function MembersPage() {
                       </select>
                     </div>
                     <div>
-                      <label className={LABEL_CLASS}>Status</label>
-                      <select value={editForm.is_active ? "active" : "inactive"} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.value === "active" })} className={INPUT_CLASS}>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
+                      <label className={LABEL_CLASS}>Fee Status</label>
+                      <select value={editForm.is_active ? "paid" : "unpaid"} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.value === "paid" })} className={INPUT_CLASS}>
+                        <option value="paid">Paid</option>
+                        <option value="unpaid">Unpaid</option>
                       </select>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLASS}>Fee Date</label>
+                      <input type="date" value={String(editForm.fee_date || "")} onChange={(e) => setEditForm({ ...editForm, fee_date: e.target.value })} className={INPUT_CLASS} />
                     </div>
                   </div>
 
@@ -441,13 +545,13 @@ export default function MembersPage() {
                       { label: "CNIC", value: selected.cnic },
                       { label: "Blood Group", value: selected.blood_group },
                       { label: "Profession", value: selected.profession },
-                      { label: "Joining Date", value: selected.joining_date ? new Date(selected.joining_date).toLocaleDateString() : null },
+                      { label: "Fee Date", value: selected.joining_date ? new Date(selected.joining_date).toLocaleDateString() : null },
                       { label: "Membership Expiry", value: selected.membership_expiry ? new Date(selected.membership_expiry).toLocaleDateString() : null },
-                      { label: "Status", value: selected.is_active ? "Active" : (selected.membership_expiry && new Date(selected.membership_expiry) < new Date() ? "Expired" : "Inactive") },
-                    ].map((item) => (
+                      { label: "Fee Status", value: isMemberPaid(selected) ? "Paid" : "Unpaid" },
+                    ].filter((item) => item.value != null && item.value !== "" && item.value !== 0).map((item) => (
                       <div key={item.label} className="bg-neutral-800/50 rounded-lg p-2 sm:p-3">
                         <p className="text-neutral-500 text-xs">{item.label}</p>
-                        <p className="text-white capitalize">{item.value || "N/A"}</p>
+                        <p className="text-white capitalize">{item.value}</p>
                       </div>
                     ))}
                   </div>
@@ -461,24 +565,16 @@ export default function MembersPage() {
                         <Edit2 className="w-4 h-4" /> Edit Profile
                       </button>
                       <button
-                        onClick={() => toggleActive(selected)}
+                        onClick={() => setPaymentStatus(selected, isMemberPaid(selected) ? "unpaid" : "paid")}
                         className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                          selected.is_active
+                          isMemberPaid(selected)
                             ? "bg-neutral-800 text-neutral-400 hover:text-red-400 border border-neutral-700"
                             : "bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20"
                         }`}
                       >
-                        {selected.is_active ? "Deactivate" : "Activate"}
+                        {isMemberPaid(selected) ? "Mark as Unpaid" : "Mark as Paid (30 Days)"}
                       </button>
                     </div>
-                    {(!selected.is_active || (selected.membership_expiry && new Date(selected.membership_expiry) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))) && (
-                      <button
-                        onClick={() => renewMembership(selected)}
-                        className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        <RefreshCw className="w-4 h-4" /> Renew Membership (30 Days)
-                      </button>
-                    )}
                     {selected.whatsapp && (
                       <button
                         onClick={() => {
@@ -542,20 +638,8 @@ export default function MembersPage() {
                     </select>
                   </div>
                   <div>
-                    <label className={LABEL_CLASS}>Age</label>
-                    <input type="number" value={newMember.age} onChange={(e) => setNewMember({ ...newMember, age: e.target.value })} className={INPUT_CLASS} />
-                  </div>
-                  <div>
-                    <label className={LABEL_CLASS}>Height (cm)</label>
-                    <input type="number" value={newMember.height} onChange={(e) => setNewMember({ ...newMember, height: e.target.value })} className={INPUT_CLASS} />
-                  </div>
-                  <div>
-                    <label className={LABEL_CLASS}>Weight (kg)</label>
-                    <input type="number" value={newMember.weight} onChange={(e) => setNewMember({ ...newMember, weight: e.target.value })} className={INPUT_CLASS} />
-                  </div>
-                  <div>
-                    <label className={LABEL_CLASS}>Goal</label>
-                    <input value={newMember.goal} onChange={(e) => setNewMember({ ...newMember, goal: e.target.value })} placeholder="e.g. Fat Loss" className={INPUT_CLASS} />
+                    <label className={LABEL_CLASS}>Fee Date</label>
+                    <input type="date" value={newMember.fee_date} onChange={(e) => setNewMember({ ...newMember, fee_date: e.target.value })} className={INPUT_CLASS} required />
                   </div>
                   <div>
                     <label className={LABEL_CLASS}>WhatsApp</label>
@@ -567,7 +651,12 @@ export default function MembersPage() {
                   </div>
                   <div>
                     <label className={LABEL_CLASS}>Blood Group</label>
-                    <input value={newMember.blood_group} onChange={(e) => setNewMember({ ...newMember, blood_group: e.target.value })} placeholder="e.g. O+" className={INPUT_CLASS} />
+                    <select value={newMember.blood_group} onChange={(e) => setNewMember({ ...newMember, blood_group: e.target.value })} className={INPUT_CLASS}>
+                      <option value="">Select</option>
+                      {BLOOD_GROUP_OPTIONS.map((group) => (
+                        <option key={group} value={group}>{group}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className={LABEL_CLASS}>Profession</label>

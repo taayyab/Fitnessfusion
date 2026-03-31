@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const cnic = formData.get('cnic') as string | null;
     const blood_group = formData.get('blood_group') as string | null;
     const profession = formData.get('profession') as string | null;
+    const fee_date = formData.get('fee_date') as string | null;
     const imageFile = formData.get('image') as File | null;
 
     // Verify the caller is an admin/trainer
@@ -63,6 +64,17 @@ export async function POST(request: NextRequest) {
       bmi_category = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Normal' : bmi < 30 ? 'Overweight' : 'Obese';
     }
 
+    const todayDate = new Date().toISOString().split('T')[0];
+    const membershipStartDateStr = fee_date || todayDate;
+    const membershipStartDate = new Date(`${membershipStartDateStr}T00:00:00.000Z`);
+    if (Number.isNaN(membershipStartDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid fee date' }, { status: 400 });
+    }
+    const membershipExpiryDate = new Date(membershipStartDate);
+    membershipExpiryDate.setUTCDate(membershipExpiryDate.getUTCDate() + 30);
+    const membershipExpiryStr = membershipExpiryDate.toISOString().split('T')[0];
+    const isPaid = membershipExpiryStr >= todayDate;
+
     // Upload image if provided
     let profile_picture: string | null = null;
     if (imageFile && imageFile.size > 0) {
@@ -102,9 +114,9 @@ export async function POST(request: NextRequest) {
       blood_group: blood_group || null,
       profession: profession || null,
       profile_picture,
-      is_active: true,
-      joining_date: new Date().toISOString().split('T')[0],
-      membership_expiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      is_active: isPaid,
+      joining_date: membershipStartDateStr,
+      membership_expiry: membershipExpiryStr,
     });
 
     if (upsertError) {

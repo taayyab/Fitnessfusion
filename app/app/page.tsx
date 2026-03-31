@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   CalendarCheck,
-  CreditCard,
   Dumbbell,
   UtensilsCrossed,
   Bell,
@@ -29,7 +28,6 @@ const PageLoader = () => (
 const DashboardPage = dynamic(() => import("./dashboard/page"), { loading: PageLoader })
 const MembersPage = dynamic(() => import("./members/page"), { loading: PageLoader })
 const AttendancePage = dynamic(() => import("./attendance/page"), { loading: PageLoader })
-const PaymentsPage = dynamic(() => import("./payments/page"), { loading: PageLoader })
 const WorkoutsPage = dynamic(() => import("./workouts/page"), { loading: PageLoader })
 const MealsPage = dynamic(() => import("./meals/page"), { loading: PageLoader })
 const NotificationsPage = dynamic(() => import("./notifications/page"), { loading: PageLoader })
@@ -39,7 +37,6 @@ const NAV_ITEMS = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { id: "members", icon: Users, label: "Members" },
   { id: "attendance", icon: CalendarCheck, label: "Attendance" },
-  { id: "payments", icon: CreditCard, label: "Payments" },
   { id: "workouts", icon: Dumbbell, label: "Workouts" },
   { id: "meals", icon: UtensilsCrossed, label: "Meal Plans" },
   { id: "notifications", icon: Bell, label: "Notifications" },
@@ -242,7 +239,6 @@ export default function AdminDashboard() {
           {activeSection === "dashboard" && <DashboardPage />}
           {activeSection === "members" && <MembersPage />}
           {activeSection === "attendance" && <AttendancePage />}
-          {activeSection === "payments" && <PaymentsPage />}
           {activeSection === "workouts" && <WorkoutsPage />}
           {activeSection === "meals" && <MealsPage />}
           {activeSection === "notifications" && <NotificationsPage />}
