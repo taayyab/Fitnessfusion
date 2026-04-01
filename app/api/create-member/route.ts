@@ -5,19 +5,24 @@ import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const full_name = formData.get('full_name') as string | null;
-    const gender = formData.get('gender') as string | null;
-    const age = formData.get('age') as string | null;
-    const height = formData.get('height') as string | null;
-    const weight = formData.get('weight') as string | null;
-    const goal = formData.get('goal') as string | null;
-    const whatsapp = formData.get('whatsapp') as string | null;
-    const cnic = formData.get('cnic') as string | null;
-    const blood_group = formData.get('blood_group') as string | null;
-    const profession = formData.get('profession') as string | null;
-    const fee_date = formData.get('fee_date') as string | null;
-    const is_paid_raw = formData.get('is_paid') as string | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const formData = await request.formData() as any;
+    const field = (key: string): string | null => {
+      const v = formData.get(key);
+      return typeof v === 'string' ? v : null;
+    };
+    const full_name = field('full_name');
+    const gender = field('gender');
+    const age = field('age');
+    const height = field('height');
+    const weight = field('weight');
+    const goal = field('goal');
+    const whatsapp = field('whatsapp');
+    const cnic = field('cnic');
+    const blood_group = field('blood_group');
+    const profession = field('profession');
+    const fee_date = field('fee_date');
+    const is_paid_raw = field('is_paid');
     const isPaidFromForm = is_paid_raw === 'true';
     const imageFile = formData.get('image') as File | null;
 

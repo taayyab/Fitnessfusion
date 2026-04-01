@@ -82,6 +82,7 @@ function getWhatsAppUrl(phone: string, message: string): string {
 export default function WhatsAppPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
 
   // Send mode
@@ -106,12 +107,18 @@ export default function WhatsAppPage() {
   }, [])
 
   async function fetchMembers() {
+    setFetchError(null)
     const supabase = createClient()
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("users")
       .select("id, full_name, email, whatsapp")
       .eq("role", "member")
       .order("full_name")
+    if (error) {
+      setFetchError("Failed to load members. Please refresh the page.")
+      setLoading(false)
+      return
+    }
     setMembers(data || [])
     setLoading(false)
   }
@@ -168,7 +175,7 @@ export default function WhatsAppPage() {
         const url = getWhatsAppUrl(member.whatsapp!, getPersonalizedMessage(member))
         window.open(url, "_blank")
         setBroadcastSent((prev) => new Set(prev).add(member.id))
-        setBroadcastIndex(broadcastTargets.length)
+        setBroadcastIndex((prev) => prev + 1)
       }, i * 600)
     })
   }
@@ -220,6 +227,17 @@ export default function WhatsAppPage() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <p className="text-red-400 text-sm">{fetchError}</p>
+        <button onClick={() => { setLoading(true); fetchMembers() }} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors">
+          Retry
+        </button>
       </div>
     )
   }

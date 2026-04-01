@@ -34,6 +34,9 @@ export default function MembersPage() {
   const [newMemberPaid, setNewMemberPaid] = useState(true)
   const [payments, setPayments] = useState<Record<string, Payment>>({})
   const [togglingPayment, setTogglingPayment] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [viewingImage, setViewingImage] = useState<User | null>(null)
 
   function isMemberPaid(member: User): boolean {
     if (!member.is_active) return false
@@ -66,11 +69,18 @@ export default function MembersPage() {
     const supabase = createClient()
     const today = getTodayDateString()
     const month = getCurrentMonth()
+    setFetchError(null)
 
     const [membersRes, paymentsRes] = await Promise.all([
       supabase.from("users").select("*").order("created_at", { ascending: false }),
       supabase.from("payments").select("*").eq("month", month),
     ])
+
+    if (membersRes.error) {
+      setFetchError("Failed to load members. Please refresh the page.")
+      setLoading(false)
+      return
+    }
 
     let nextMembers = (membersRes.data || []) as User[]
     const paymentsList = (paymentsRes.data || []) as Payment[]
@@ -105,6 +115,7 @@ export default function MembersPage() {
   }
 
   async function setPaymentStatus(member: User, status: "paid" | "unpaid") {
+    setActionError(null)
     const supabase = createClient()
     const today = getTodayDateString()
     const month = getCurrentMonth()
@@ -124,7 +135,11 @@ export default function MembersPage() {
             updated_at: new Date().toISOString(),
           }
 
-    await supabase.from("users").update(userUpdates).eq("id", member.id)
+    const { error: updateError } = await supabase.from("users").update(userUpdates).eq("id", member.id)
+    if (updateError) {
+      setActionError("Failed to update payment status. Please try again.")
+      return
+    }
 
     // Update or create payment record in payments table
     const existingPayment = payments[member.id]
@@ -242,6 +257,7 @@ export default function MembersPage() {
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
+      if (imagePreview) URL.revokeObjectURL(imagePreview)
       setNewMemberImage(file)
       setImagePreview(URL.createObjectURL(file))
     }
@@ -250,6 +266,7 @@ export default function MembersPage() {
   async function handleAddMember(e: React.FormEvent) {
     e.preventDefault()
     setCreating(true)
+    setActionError(null)
     try {
       const formData = new FormData()
       Object.entries(newMember).forEach(([key, value]) => {
@@ -266,7 +283,7 @@ export default function MembersPage() {
       })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || "Failed to create member")
+        setActionError(result.error || "Failed to create member")
         return
       }
 
@@ -289,8 +306,29 @@ export default function MembersPage() {
     )
   }
 
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4">
+        <p className="text-red-400 text-sm">{fetchError}</p>
+        <button onClick={() => { setLoading(true); fetchMembers() }} className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors">
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
+      {/* Action Error Toast */}
+      {actionError && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center justify-between">
+          <p className="text-red-400 text-sm">{actionError}</p>
+          <button onClick={() => setActionError(null)} className="text-red-400/50 hover:text-red-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-white text-lg font-semibold">Members ({filtered.length})</h2>
@@ -353,16 +391,18 @@ export default function MembersPage() {
               >
                 {/* Avatar + Name + Email */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 bg-neutral-800 rounded-full flex items-center justify-center text-white text-sm font-medium overflow-hidden flex-shrink-0">
+                  <div
+                    onClick={(e) => { if (member.profile_picture) { e.stopPropagation(); setViewingImage(member) } }}
+                    className={`w-9 h-9 bg-neutral-800 rounded-full flex items-center justify-center text-white text-sm font-medium overflow-hidden flex-shrink-0 ${member.profile_picture ? "cursor-zoom-in ring-1 ring-neutral-700 hover:ring-red-500/40 transition-all" : ""}`}
+                  >
                     {member.profile_picture ? (
-                      <img src={member.profile_picture} alt="" className="w-full h-full object-cover" />
+                      <img src={member.profile_picture} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none" }} />
                     ) : (
-                      (member.full_name || member.email)[0]?.toUpperCase()
+                      (member.full_name || member.email || "?")[0]?.toUpperCase()
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-white text-sm font-medium truncate">{member.full_name || "Unnamed"}</p>
-                    <p className="text-neutral-500 text-xs truncate">{member.email}</p>
                   </div>
                   {/* Mobile-only status badge */}
                   <button
@@ -537,11 +577,14 @@ export default function MembersPage() {
                 /* View Details */
                 <>
                   <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-neutral-800 rounded-full flex items-center justify-center text-white text-lg sm:text-xl font-medium overflow-hidden flex-shrink-0">
+                    <div
+                      onClick={() => { if (selected.profile_picture) setViewingImage(selected) }}
+                      className={`w-12 h-12 sm:w-16 sm:h-16 bg-neutral-800 rounded-full flex items-center justify-center text-white text-lg sm:text-xl font-medium overflow-hidden flex-shrink-0 ${selected.profile_picture ? "cursor-zoom-in ring-1 ring-neutral-700 hover:ring-red-500/40 transition-all" : ""}`}
+                    >
                       {selected.profile_picture ? (
-                        <img src={selected.profile_picture} alt="" className="w-full h-full object-cover" />
+                        <img src={selected.profile_picture} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none" }} />
                       ) : (
-                        (selected.full_name || selected.email)[0]?.toUpperCase()
+                        (selected.full_name || selected.email || "?")[0]?.toUpperCase()
                       )}
                     </div>
                     <div>
@@ -702,6 +745,12 @@ export default function MembersPage() {
                   </button>
                 </div>
 
+                {actionError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                    <p className="text-red-400 text-sm">{actionError}</p>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={creating}
@@ -711,6 +760,27 @@ export default function MembersPage() {
                 </button>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Viewer Popup */}
+      {viewingImage && viewingImage.profile_picture && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setViewingImage(null)}>
+          <div className="relative max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setViewingImage(null)}
+              className="absolute -top-10 right-0 text-neutral-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={viewingImage.profile_picture}
+              alt={viewingImage.full_name || "Member"}
+              className="w-full rounded-2xl object-contain max-h-[70vh]"
+              onError={(e) => { e.currentTarget.style.display = "none" }}
+            />
+            <p className="text-center text-white text-sm font-medium mt-3">{viewingImage.full_name || "Unnamed"}</p>
           </div>
         </div>
       )}
