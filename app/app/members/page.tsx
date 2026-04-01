@@ -31,7 +31,9 @@ export default function MembersPage() {
   const [newMemberImage, setNewMemberImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [newMemberPaid, setNewMemberPaid] = useState(true)
   const [payments, setPayments] = useState<Record<string, Payment>>({})
+  const [togglingPayment, setTogglingPayment] = useState<string | null>(null)
 
   function isMemberPaid(member: User): boolean {
     if (!member.is_active) return false
@@ -151,7 +153,7 @@ export default function MembersPage() {
     // Refresh data
     const updated = { ...member, ...userUpdates }
     setMembers((prev) => prev.map((m) => (m.id === member.id ? updated : m)))
-    setSelected(updated)
+    setSelected((prev) => (prev?.id === member.id ? ({ ...prev, ...userUpdates } as User) : prev))
     // Re-fetch payments to stay in sync
     const { data: freshPayments } = await supabase.from("payments").select("*").eq("month", month)
     const paymentsMap: Record<string, Payment> = {}
@@ -253,6 +255,7 @@ export default function MembersPage() {
       Object.entries(newMember).forEach(([key, value]) => {
         if (value) formData.append(key, value)
       })
+      formData.append("is_paid", newMemberPaid ? "true" : "false")
       if (newMemberImage) {
         formData.append("image", newMemberImage)
       }
@@ -269,6 +272,7 @@ export default function MembersPage() {
 
       setShowAdd(false)
       setNewMember({ full_name: "", whatsapp: "", cnic: "", gender: "", blood_group: "", profession: "", fee_date: getTodayDateString() })
+      setNewMemberPaid(true)
       setNewMemberImage(null)
       setImagePreview(null)
       setTimeout(fetchMembers, 500)
@@ -361,11 +365,21 @@ export default function MembersPage() {
                     <p className="text-neutral-500 text-xs truncate">{member.email}</p>
                   </div>
                   {/* Mobile-only status badge */}
-                  <span className={`md:hidden text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                    isMemberPaid(member) ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                  }`}>
-                    {isMemberPaid(member) ? "Paid" : "Unpaid"}
-                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (togglingPayment) return
+                      setTogglingPayment(member.id)
+                      setPaymentStatus(member, isMemberPaid(member) ? "unpaid" : "paid").finally(() => setTogglingPayment(null))
+                    }}
+                    disabled={togglingPayment === member.id}
+                    className={`md:hidden text-xs px-2 py-0.5 rounded-full flex-shrink-0 transition-colors ${
+                      togglingPayment === member.id ? "opacity-50" :
+                      isMemberPaid(member) ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                    }`}
+                  >
+                    {togglingPayment === member.id ? "..." : isMemberPaid(member) ? "Paid" : "Unpaid"}
+                  </button>
                 </div>
 
                 {/* Phone */}
@@ -388,11 +402,21 @@ export default function MembersPage() {
 
                 {/* Status */}
                 <div className="hidden md:block text-right">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    isMemberPaid(member) ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                  }`}>
-                    {isMemberPaid(member) ? "Paid" : "Unpaid"}
-                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (togglingPayment) return
+                      setTogglingPayment(member.id)
+                      setPaymentStatus(member, isMemberPaid(member) ? "unpaid" : "paid").finally(() => setTogglingPayment(null))
+                    }}
+                    disabled={togglingPayment === member.id}
+                    className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+                      togglingPayment === member.id ? "opacity-50" :
+                      isMemberPaid(member) ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                    }`}
+                  >
+                    {togglingPayment === member.id ? "..." : isMemberPaid(member) ? "Paid" : "Unpaid"}
+                  </button>
                 </div>
               </div>
             ))}
@@ -663,6 +687,21 @@ export default function MembersPage() {
                     <input value={newMember.profession} onChange={(e) => setNewMember({ ...newMember, profession: e.target.value })} className={INPUT_CLASS} />
                   </div>
                 </div>
+                {/* Paid / Unpaid toggle */}
+                <div className="flex items-center justify-between bg-neutral-800/50 rounded-lg px-4 py-3 mt-1">
+                  <span className="text-sm text-neutral-300">Fee Status</span>
+                  <button
+                    type="button"
+                    onClick={() => setNewMemberPaid(!newMemberPaid)}
+                    className={`relative w-20 h-8 rounded-full transition-colors ${newMemberPaid ? "bg-green-500" : "bg-neutral-600"}`}
+                  >
+                    <span className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${newMemberPaid ? "left-[calc(100%-28px)]" : "left-1"}`} />
+                    <span className={`absolute inset-0 flex items-center text-xs font-medium ${newMemberPaid ? "justify-start pl-2 text-white" : "justify-end pr-2 text-neutral-300"}`}>
+                      {newMemberPaid ? "Paid" : "Unpaid"}
+                    </span>
+                  </button>
+                </div>
+
                 <button
                   type="submit"
                   disabled={creating}

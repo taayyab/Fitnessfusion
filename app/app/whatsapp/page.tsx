@@ -31,26 +31,32 @@ const TEMPLATES = [
   {
     label: "Payment Reminder",
     message:
-      "Hi {name}, this is a friendly reminder that your monthly gym fee is due. Please make the payment at your earliest convenience. Thank you!",
+      "Hi {name}, this is a friendly reminder that your monthly gym fee is due. Please make the payment at your earliest convenience. Thank you!\n\n" +
+      "\u202Bالسلام علیکم {name}، امید ہے آپ خیریت سے ہوں گے۔ یہ یاد دہانی ہے کہ آپ کی ماہانہ جم فیس بقایا ہے۔ براہ کرم سہولت کے مطابق جلد ادائیگی کر دیں۔ شکریہ۔\u202C",
   },
   {
     label: "Gym Closure Notice",
     message:
-      "Hi {name}, please be informed that the gym will remain closed on {date}. We apologize for the inconvenience. See you soon!",
+      "Hi {name}, please be informed that the gym will remain closed on {date}. We apologize for the inconvenience. See you soon!\n\n" +
+      "\u202Bالسلام علیکم {name}، اطلاع دی جاتی ہے کہ جم {date} کو بند رہے گا۔ اس سے ہونے والی زحمت کے لیے ہم معذرت خواہ ہیں۔ آپ سے دوبارہ جلد ملاقات ہوگی۔\u202C",
   },
   {
     label: "Welcome Message",
     message:
-      "Welcome to Fitness Fusion, {name}! We're excited to have you on board. Feel free to reach out if you have any questions. Let's crush those goals!",
+      "Welcome to Fitness Fusion, {name}! We're excited to have you on board. Feel free to reach out if you have any questions. Let's crush those goals!\n\n" +
+      "\u202Bفٹنس فیوژن میں خوش آمدید {name}! آپ کی شمولیت ہمارے لیے باعثِ خوشی ہے۔ اگر آپ کو کسی بھی رہنمائی کی ضرورت ہو تو بلاجھجھک رابطہ کریں۔ آئیے اپنے فٹنس اہداف مل کر حاصل کرتے ہیں۔\u202C",
   },
   {
     label: "Membership Expiry",
     message:
-      "Hi {name}, your gym membership is about to expire. Please renew it to continue your fitness journey with us. Contact us for details!",
+      "Hi {name}, your gym membership is about to expire. Please renew it to continue your fitness journey with us. Contact us for details!\n\n" +
+      "\u202Bالسلام علیکم {name}، آپ کی جم ممبرشپ جلد ختم ہونے والی ہے۔ براہ کرم اپنی ممبرشپ کی تجدید کروا لیں تاکہ آپ اپنا فٹنس سفر بلا تعطل جاری رکھ سکیں۔ مزید معلومات کے لیے ہم سے رابطہ کریں۔\u202C",
   },
   {
     label: "Custom",
-    message: "",
+    message:
+      "Hi {name}, [write your custom message here].\n\n" +
+      "\u202Bالسلام علیکم {name}، [اپنا حسبِ ضرورت پیغام یہاں لکھیں]۔\u202C",
   },
 ]
 
