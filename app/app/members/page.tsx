@@ -30,6 +30,9 @@ export default function MembersPage() {
   const [newMember, setNewMember] = useState({ full_name: "", whatsapp: "", cnic: "", gender: "", blood_group: "", profession: "", fee_date: getTodayDateString() })
   const [newMemberImage, setNewMemberImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [editMemberImage, setEditMemberImage] = useState<File | null>(null)
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null)
+  const [removeEditImage, setRemoveEditImage] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newMemberPaid, setNewMemberPaid] = useState(true)
   const [payments, setPayments] = useState<Record<string, Payment>>({})
@@ -42,6 +45,32 @@ export default function MembersPage() {
     if (!member.is_active) return false
     if (!member.membership_expiry) return false
     return member.membership_expiry >= getTodayDateString()
+  }
+
+  function revokeBlobPreview(url: string | null) {
+    if (url?.startsWith("blob:")) {
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  function resetEditImageState(nextPreview: string | null = null) {
+    revokeBlobPreview(editImagePreview)
+    setEditMemberImage(null)
+    setEditImagePreview(nextPreview)
+    setRemoveEditImage(false)
+  }
+
+  function closeMemberModal() {
+    setSelected(null)
+    setEditing(false)
+    resetEditImageState()
+  }
+
+  function closeAddModal() {
+    setShowAdd(false)
+    revokeBlobPreview(imagePreview)
+    setImagePreview(null)
+    setNewMemberImage(null)
   }
 
 
@@ -179,6 +208,7 @@ export default function MembersPage() {
   }
 
   function openEdit(member: User) {
+    resetEditImageState(member.profile_picture || null)
     setEditForm({
       full_name: member.full_name || "",
       gender: member.gender || "",
@@ -208,59 +238,94 @@ export default function MembersPage() {
   async function handleSaveEdit() {
     if (!selected) return
     setSaving(true)
+    setActionError(null)
     const supabase = createClient()
-    const height = editForm.height ? parseFloat(String(editForm.height)) : null
-    const weight = editForm.weight ? parseFloat(String(editForm.weight)) : null
-    const feeDate = editForm.fee_date ? String(editForm.fee_date) : null
-    const membershipExpiry = feeDate ? addDaysToDateString(feeDate, 30) : null
-    const paidFromForm = Boolean(editForm.is_active)
-    const isActive = membershipExpiry ? paidFromForm && membershipExpiry >= getTodayDateString() : paidFromForm
-    const { bmi, bmi_category } = calcBmi(height || 0, weight || 0)
+    try {
+      const height = editForm.height ? parseFloat(String(editForm.height)) : null
+      const weight = editForm.weight ? parseFloat(String(editForm.weight)) : null
+      const feeDate = editForm.fee_date ? String(editForm.fee_date) : null
+      const membershipExpiry = feeDate ? addDaysToDateString(feeDate, 30) : null
+      const paidFromForm = Boolean(editForm.is_active)
+      const isActive = membershipExpiry ? paidFromForm && membershipExpiry >= getTodayDateString() : paidFromForm
+      const { bmi, bmi_category } = calcBmi(height || 0, weight || 0)
+      let profilePicture = removeEditImage ? null : selected.profile_picture
 
-    const updates = {
-      full_name: editForm.full_name || null,
-      gender: editForm.gender || null,
-      age: editForm.age ? parseInt(String(editForm.age)) : null,
-      height,
-      weight,
-      bmi,
-      bmi_category,
-      goal: editForm.goal || null,
-      whatsapp: editForm.whatsapp || null,
-      cnic: editForm.cnic || null,
-      blood_group: editForm.blood_group || null,
-      profession: editForm.profession || null,
-      daily_calories: editForm.daily_calories ? parseInt(String(editForm.daily_calories)) : null,
-      joining_date: feeDate,
-      membership_expiry: membershipExpiry,
-      role: editForm.role as User["role"],
-      is_active: isActive,
-      updated_at: new Date().toISOString(),
+      if (editMemberImage) {
+        const ext = editMemberImage.name.split(".").pop() || "jpg"
+        const filePath = `profiles/${selected.id}_${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(filePath, editMemberImage, {
+            contentType: editMemberImage.type,
+            upsert: true,
+          })
+
+        if (uploadError) throw new Error(uploadError.message)
+
+        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(filePath)
+        profilePicture = urlData.publicUrl
+      }
+
+      const updates = {
+        full_name: editForm.full_name || null,
+        gender: editForm.gender || null,
+        age: editForm.age ? parseInt(String(editForm.age)) : null,
+        height,
+        weight,
+        bmi,
+        bmi_category,
+        goal: editForm.goal || null,
+        whatsapp: editForm.whatsapp || null,
+        cnic: editForm.cnic || null,
+        blood_group: editForm.blood_group || null,
+        profession: editForm.profession || null,
+        daily_calories: editForm.daily_calories ? parseInt(String(editForm.daily_calories)) : null,
+        joining_date: feeDate,
+        membership_expiry: membershipExpiry,
+        role: editForm.role as User["role"],
+        is_active: isActive,
+        profile_picture: profilePicture,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error: updateError } = await supabase.from("users").update(updates).eq("id", selected.id)
+      if (updateError) throw new Error(updateError.message)
+
+      // Sync payment status in payments table
+      const wasPaid = isMemberPaid(selected)
+      if (paidFromForm !== wasPaid) {
+        await setPaymentStatus(selected, paidFromForm ? "paid" : "unpaid")
+      }
+
+      setEditing(false)
+      resetEditImageState()
+      await fetchMembers()
+      // Refresh selected
+      const { data } = await supabase.from("users").select("*").eq("id", selected.id).single()
+      if (data) setSelected(data)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Failed to update member")
+    } finally {
+      setSaving(false)
     }
-
-    await supabase.from("users").update(updates).eq("id", selected.id)
-
-    // Sync payment status in payments table
-    const wasPaid = isMemberPaid(selected)
-    if (paidFromForm !== wasPaid) {
-      await setPaymentStatus(selected, paidFromForm ? "paid" : "unpaid")
-    }
-
-    setEditing(false)
-    setSaving(false)
-    await fetchMembers()
-    // Refresh selected
-    const { data } = await supabase.from("users").select("*").eq("id", selected.id).single()
-    if (data) setSelected(data)
   }
 
-  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleNewMemberImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      if (imagePreview) URL.revokeObjectURL(imagePreview)
+      revokeBlobPreview(imagePreview)
       setNewMemberImage(file)
       setImagePreview(URL.createObjectURL(file))
     }
+  }
+
+  function handleEditImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    revokeBlobPreview(editImagePreview)
+    setEditMemberImage(file)
+    setEditImagePreview(URL.createObjectURL(file))
+    setRemoveEditImage(false)
   }
 
   async function handleAddMember(e: React.FormEvent) {
@@ -287,11 +352,9 @@ export default function MembersPage() {
         return
       }
 
-      setShowAdd(false)
+      closeAddModal()
       setNewMember({ full_name: "", whatsapp: "", cnic: "", gender: "", blood_group: "", profession: "", fee_date: getTodayDateString() })
       setNewMemberPaid(true)
-      setNewMemberImage(null)
-      setImagePreview(null)
       setTimeout(fetchMembers, 500)
     } finally {
       setCreating(false)
@@ -466,7 +529,7 @@ export default function MembersPage() {
 
       {/* Member Detail / Edit Modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => { setSelected(null); setEditing(false) }}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={closeMemberModal}>
           <div className="bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
@@ -477,7 +540,7 @@ export default function MembersPage() {
                       <Edit2 className="w-4 h-4" />
                     </button>
                   )}
-                  <button onClick={() => { setSelected(null); setEditing(false) }} className="text-neutral-500 hover:text-white">
+                  <button onClick={closeMemberModal} className="text-neutral-500 hover:text-white">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -486,6 +549,46 @@ export default function MembersPage() {
               {editing ? (
                 /* Edit Form */
                 <div className="space-y-3">
+                  <div className="flex justify-center mb-2">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <label className="cursor-pointer group">
+                        <input type="file" accept="image/*" onChange={handleEditImageSelect} className="hidden" />
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-neutral-800 border-2 border-dashed border-neutral-600 group-hover:border-red-500/50 flex items-center justify-center overflow-hidden transition-colors">
+                          {removeEditImage ? (
+                            <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-500 group-hover:text-red-400 transition-colors" />
+                          ) : (editImagePreview || selected.profile_picture) ? (
+                            <img src={editImagePreview || selected.profile_picture || ""} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-500 group-hover:text-red-400 transition-colors" />
+                          )}
+                        </div>
+                        <p className="text-xs text-neutral-500 text-center mt-1">{editMemberImage ? "New Photo Selected" : "Change Photo"}</p>
+                      </label>
+                      {(selected.profile_picture || editMemberImage || removeEditImage) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (removeEditImage) {
+                              setRemoveEditImage(false)
+                              return
+                            }
+                            if (editMemberImage) {
+                              resetEditImageState(selected.profile_picture || null)
+                              return
+                            }
+                            if (selected.profile_picture) {
+                              resetEditImageState()
+                              setRemoveEditImage(true)
+                            }
+                          }}
+                          className="text-xs text-neutral-500 hover:text-red-400 transition-colors"
+                        >
+                          {removeEditImage ? "Keep Current Photo" : editMemberImage ? "Discard New Photo" : "Remove Current Photo"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="sm:col-span-2">
                       <label className={LABEL_CLASS}>Full Name</label>
@@ -566,7 +669,10 @@ export default function MembersPage() {
                       {saving ? "Saving..." : "Save Changes"}
                     </button>
                     <button
-                      onClick={() => setEditing(false)}
+                      onClick={() => {
+                        setEditing(false)
+                        resetEditImageState()
+                      }}
                       className="px-4 py-2.5 bg-neutral-800 text-neutral-400 hover:text-white rounded-lg text-sm transition-colors"
                     >
                       Cancel
@@ -666,12 +772,12 @@ export default function MembersPage() {
 
       {/* Add Member Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowAdd(false)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={closeAddModal}>
           <div className="bg-neutral-900 border border-neutral-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <h3 className="text-white text-base sm:text-lg font-semibold">Add New Member</h3>
-                <button onClick={() => setShowAdd(false)} className="text-neutral-500 hover:text-white">
+                <button onClick={closeAddModal} className="text-neutral-500 hover:text-white">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -679,7 +785,7 @@ export default function MembersPage() {
                 {/* Profile Image */}
                 <div className="flex justify-center mb-2">
                   <label className="cursor-pointer group">
-                    <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+                    <input type="file" accept="image/*" onChange={handleNewMemberImageSelect} className="hidden" />
                     <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-neutral-800 border-2 border-dashed border-neutral-600 group-hover:border-red-500/50 flex items-center justify-center overflow-hidden transition-colors">
                       {imagePreview ? (
                         <img src={imagePreview} alt="" className="w-full h-full object-cover" />
