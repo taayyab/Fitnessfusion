@@ -161,23 +161,38 @@ export default function WhatsAppPage() {
     setShowBroadcastModal(true)
   }
 
+  function sendAllBroadcast() {
+    const remaining = broadcastTargets.filter((m) => !broadcastSent.has(m.id))
+    let blocked = false
+
+    remaining.forEach((member, i) => {
+      setTimeout(() => {
+        const url = getWhatsAppUrl(member.whatsapp!, getPersonalizedMessage(member))
+        const win = window.open(url, "_blank")
+
+        if (!win || win.closed) {
+          if (!blocked) {
+            blocked = true
+            setSendResult({
+              success: false,
+              message:
+                "Popups blocked by browser! Please allow popups for this site: click the blocked-popup icon in your address bar, then try again.",
+            })
+          }
+          return
+        }
+
+        setBroadcastSent((prev) => new Set(prev).add(member.id))
+        setBroadcastIndex((prev) => prev + 1)
+      }, i * 800)
+    })
+  }
+
   function sendNextBroadcast(member: Member) {
     const url = getWhatsAppUrl(member.whatsapp!, getPersonalizedMessage(member))
     window.open(url, "_blank")
     setBroadcastSent((prev) => new Set(prev).add(member.id))
     setBroadcastIndex((prev) => prev + 1)
-  }
-
-  function sendAllBroadcast() {
-    const remaining = broadcastTargets.filter((m) => !broadcastSent.has(m.id))
-    remaining.forEach((member, i) => {
-      setTimeout(() => {
-        const url = getWhatsAppUrl(member.whatsapp!, getPersonalizedMessage(member))
-        window.open(url, "_blank")
-        setBroadcastSent((prev) => new Set(prev).add(member.id))
-        setBroadcastIndex((prev) => prev + 1)
-      }, i * 600)
-    })
   }
 
   function closeBroadcast() {
@@ -538,6 +553,9 @@ export default function WhatsAppPage() {
               </div>
               <p className="text-neutral-400 text-sm mt-1">
                 {broadcastSent.size} of {broadcastTargets.length} messages sent
+              </p>
+              <p className="text-yellow-400/80 text-xs mt-2">
+                ⚠ For "Send to All", allow popups for this site in your browser&apos;s address bar.
               </p>
               {/* Progress bar */}
               <div className="w-full bg-neutral-800 rounded-full h-1.5 mt-3">

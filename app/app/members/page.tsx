@@ -21,6 +21,9 @@ export default function MembersPage() {
   const [filtered, setFiltered] = useState<User[]>([])
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
+  const [paymentFilter, setPaymentFilter] = useState<string>("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<User | null>(null)
   const [editing, setEditing] = useState(false)
@@ -91,8 +94,12 @@ export default function MembersPage() {
     if (roleFilter !== "all") {
       result = result.filter((m) => m.role === roleFilter)
     }
+    if (paymentFilter !== "all") {
+      result = result.filter((m) => (paymentFilter === "paid" ? isMemberPaid(m) : !isMemberPaid(m)))
+    }
     setFiltered(result)
-  }, [search, roleFilter, members])
+    setCurrentPage(1)
+  }, [search, roleFilter, paymentFilter, members])
 
   async function fetchMembers() {
     const supabase = createClient()
@@ -428,6 +435,18 @@ export default function MembersPage() {
             <option value="admin">Admins</option>
           </select>
         </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+          <select
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+            className="bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-8 py-2.5 text-white text-sm focus:outline-none focus:border-red-500/50 appearance-none cursor-pointer"
+          >
+            <option value="all">All Payments</option>
+            <option value="paid">Paid</option>
+            <option value="unpaid">Unpaid</option>
+          </select>
+        </div>
       </div>
 
       {/* Members List */}
@@ -446,7 +465,7 @@ export default function MembersPage() {
           <div className="text-center py-12 text-neutral-500">No members found</div>
         ) : (
           <div className="divide-y divide-neutral-800/50">
-            {filtered.map((member) => (
+            {filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((member) => (
               <div
                 key={member.id}
                 onClick={() => { setSelected(member); setEditing(false) }}
@@ -527,6 +546,34 @@ export default function MembersPage() {
         )}
       </div>
 
+      {/* Pagination */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <p className="text-neutral-500">
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 bg-neutral-900 border border-neutral-800 rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-800 transition-colors"
+            >
+              Previous
+            </button>
+            <span className="text-neutral-400 px-2">
+              Page {currentPage} / {Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))}
+              disabled={currentPage >= Math.ceil(filtered.length / PAGE_SIZE)}
+              className="px-3 py-1.5 bg-neutral-900 border border-neutral-800 rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-800 transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Member Detail / Edit Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={closeMemberModal}>
@@ -548,8 +595,8 @@ export default function MembersPage() {
 
               {editing ? (
                 /* Edit Form */
-                <div className="space-y-3">
-                  <div className="flex justify-center mb-2">
+                <div className="space-y-4">
+                  <div className="flex justify-center">
                     <div className="flex flex-col items-center gap-1.5">
                       <label className="cursor-pointer group">
                         <input type="file" accept="image/*" onChange={handleEditImageSelect} className="hidden" />
@@ -659,7 +706,7 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-3 mt-4">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-1">
                     <button
                       onClick={handleSaveEdit}
                       disabled={saving}
@@ -704,7 +751,7 @@ export default function MembersPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
                     {[
                       { label: "Gender", value: selected.gender },
                       { label: "Age", value: selected.age },
